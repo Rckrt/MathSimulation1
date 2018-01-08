@@ -34,7 +34,7 @@ class Canvas(app.Canvas):
         self.program['a_position'] = position
         self.program['u_sky_texture'] = gloo.Texture2D(self.sky, wrapping='repeat', interpolation='linear')
         self.program['u_bed_texture'] = gloo.Texture2D(self.bed, wrapping='repeat', interpolation='linear')
-        self.program['u_eye_height'] = 3
+        self.program['u_eye_height'] = 1.5
         self.program['u_alpha'] = 0.9
     #    self.program['u_bed_depth'] = 1
         self.program["a_bed_depth"] = self.bed_resolver.bed_depths("beach")
@@ -44,13 +44,19 @@ class Canvas(app.Canvas):
 
         self.program_point = gloo.Program(shaders.water_vert_shader, shaders.point_frag_shader)
         self.program_point['a_position'] = position
-        self.program_point['u_eye_height'] = 3
+        self.program_point['u_eye_height'] = 1
 
         self.program_bed = gloo.Program(shaders.bed_vert_shader, shaders.bed_frag_shader)
         self.program_bed['a_position'] = position
         self.program_bed["a_bed_depth"] = self.bed_resolver.bed_depths("beach")
-        self.program_bed['u_eye_height'] = 3
+        self.program_bed['u_eye_height'] = 1
         self.program_bed['u_bed_texture'] = gloo.Texture2D(self.bed, wrapping='repeat', interpolation='linear')
+
+        self.program_sky = gloo.Program(shaders.sky_vert_shader, shaders.sky_frag_shader)
+        self.program_sky['a_position'] = position
+        self.program_sky["a_bed_depth"] = self.bed_resolver.bed_depths("sky")
+        self.program_sky['u_eye_height'] = 0.1
+        self.program_sky['u_sky_texture'] = gloo.Texture2D(self.sky, wrapping='repeat', interpolation='linear')
 
         # GUI set up
         self.camera = np.array([0, 0, 1])
@@ -82,6 +88,7 @@ class Canvas(app.Canvas):
         self.program['u_world_view'] = world_view.T
         self.program_point['u_world_view'] = world_view.T
         self.program_bed['u_world_view'] = world_view.T
+        self.program_sky['u_world_view'] = world_view.T
 
     def rotate_camera(self, shift):
         right = np.cross(self.up, self.camera)
@@ -98,13 +105,15 @@ class Canvas(app.Canvas):
         self.program["u_depth_mult"] = 1 if self.depth_flag else 0
         self.program["u_sky_mult"] = 1 if self.sky_flag else 0
         self.program_bed["a_bed_depth"] = self.bed_resolver.bed_depths(self.bed_type)
+        self.program["a_bed_depth"] = self.bed_resolver.bed_depths(self.bed_type)
 
     def activate_zoom(self):
         self.width, self.height = self.size
         gloo.set_viewport(0, 0, *self.physical_size)
 
     def on_draw(self, event):
-        gloo.set_state(clear_color=(0, 0, 0, 1), blend=False)
+        # 24A2D0
+        gloo.set_state(clear_color=(0.1411, 0.6352, 0.8157, 1), blend=True)
         gloo.clear()
         height = self.surface.height(self.time)
         normal = self.surface.normal(self.time)
@@ -115,6 +124,7 @@ class Canvas(app.Canvas):
         gloo.set_state(depth_test=True)
         self.program.draw('triangles', self.triangles)
         self.program_bed.draw('triangles', self.triangles)
+        self.program_sky.draw('triangles', self.triangles)
 
         # draw points
         if self.are_points_visible:
@@ -188,19 +198,31 @@ class Canvas(app.Canvas):
         if not self.drag_start is None:
             pos = self.screen_to_gl_coordinates(event.pos)
             self.rotate_camera(pos - self.drag_start)
+            if (pos - self.drag_start)[1] > 0 or self.program['u_eye_height'] < 0.1:
+                self.program['u_eye_height'] /= 0.99
+                self.program_bed['u_eye_height'] /= 0.99
+                self.program_sky['u_eye_height'] /= 0.99
+            else:
+                self.program['u_eye_height'] *= 0.99
+                self.program_bed['u_eye_height'] *= 0.99
+                self.program_sky['u_eye_height'] *= 0.99
+
+            print (pos - self.drag_start)
             self.drag_start = pos
             self.set_camera()
             self.update()
 
     def on_mouse_wheel(self, event):
         if event.delta[1] > 0:
-            if self.program['u_eye_height'] > 0.5:
-                self.program['u_eye_height'] -= event.delta[1] * 0.2
-                self.program_bed['u_eye_height'] -= event.delta[1] * 0.2
+            if self.program['u_eye_height'] > 0.3:
+                self.program['u_eye_height'] -= event.delta[1] * 0.02
+                self.program_bed['u_eye_height'] -= event.delta[1] * 0.02
+                self.program_sky['u_eye_height'] -= event.delta[1] * 0.02
         else:
             if self.program['u_eye_height'] < 5:
-                self.program['u_eye_height'] -= event.delta[1] * 0.2
-                self.program_bed['u_eye_height'] -= event.delta[1] * 0.2
+                self.program['u_eye_height'] -= event.delta[1] * 0.02
+                self.program_bed['u_eye_height'] -= event.delta[1] * 0.02
+                self.program_sky['u_eye_height'] -= event.delta[1] * 0.02
 
     def screen_to_gl_coordinates(self, pos):
         return 2 * np.array(pos) / np.array(self.size) - 1

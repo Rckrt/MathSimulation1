@@ -38,15 +38,20 @@ void main() {
     float sky_mult = u_sky_mult;
     float reflectance = v_reflectance;
 
+    rgb = sky_mult * sky_color * reflectance + image_color * (1 - reflectance)
+        + diffused_intensity * u_sun_diffused_color + reflected_intensity * u_sun_reflected_color;
+
     if (1 - reflectance < 0) {
         reflectance = 0;
         reflected_intensity = 0;
         diffused_intensity = 0;
         sky_mult = 0;
-    }
 
-    rgb = sky_mult * sky_color * reflectance + image_color * (1 - reflectance)
+        image_color = u_bed_mult * sky_color * v_mask + u_depth_mult * ambient_water * (1 - v_mask);
+
+        rgb = sky_mult * sky_color * reflectance + image_color * (1 - reflectance)
         + diffused_intensity * u_sun_diffused_color + reflected_intensity * u_sun_reflected_color;
+    }
 
     gl_FragColor.rgb = clamp(rgb,0.0,1.0);
     gl_FragColor.a = 1;
